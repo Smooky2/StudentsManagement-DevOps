@@ -15,6 +15,7 @@ public class DepartmentService implements IDepartmentService {
 
     @Override
     public List<Department> getAllDepartments() {
+        System.out.println("test");
         return departmentRepository.findAll();
     }
 
