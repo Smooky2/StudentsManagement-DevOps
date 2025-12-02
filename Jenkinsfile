@@ -2,57 +2,68 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-login')
-        IMAGE_NAME = "taiebbsaies/devopstest"
+        DOCKERHUB_CREDENTIALS = 'dockerhub-login'
+        DOCKERHUB_USER        = 'taiebbsaies'
+        IMAGE_NAME            = "${DOCKERHUB_USER}/atelier-jenkins"
+        IMAGE_TAG             = "${BUILD_ID}"
+        IMAGE_LATEST          = "${IMAGE_NAME}:latest"
     }
 
     stages {
-
-        stage('Clone repository') {
+        stage('Checkout') {
             steps {
-                git 'https://github.com/Smooky2/StudentsManagement-DevOps.git'
+                echo "Checking out main branch"
+                checkout scm
             }
         }
 
-        stage('Build JAR with Maven') {
+        stage('Build with Maven') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                echo "Building JAR"
+                sh '''
+                    chmod +x mvnw
+                    ./mvnw clean package -DskipTests
+                '''
             }
         }
 
-        stage('Build Docker image') {
+        stage('Docker Build') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:latest .'
-            }
-        }
-
-        stage('Login to DockerHub') {
-            steps {
+                echo "Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}"
                 sh """
-                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login \
-                        -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_LATEST} .
                 """
             }
         }
 
-        stage('Push Docker image') {
+        stage('Docker Push') {
             steps {
-                sh 'docker push $IMAGE_NAME:latest'
-            }
-        }
-
-        stage('Deploy container') {
-            steps {
-                sh 'docker stop devopstest || true'
-                sh 'docker rm devopstest || true'
-                sh 'docker run -d --name devopstest -p 8080:8080 $IMAGE_NAME:latest'
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${IMAGE_LATEST}
+                        docker logout
+                    '''
+                }
             }
         }
     }
 
     post {
+        success {
+            echo "SUCCESS: Image pushed → ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
+            echo "FAILURE: Something went wrong"
+        }
         always {
-            echo "Pipeline finished."
+            cleanWs()
+            sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_LATEST} || true"
         }
     }
 }
