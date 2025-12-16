@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven'   // Make sure Maven is configured in Jenkins
+    }
+
     environment {
         DOCKERHUB_CREDENTIALS = 'dockerhub-login'
         DOCKERHUB_USER        = 'taiebbsaies'
@@ -10,6 +14,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo "Checking out main branch"
@@ -20,6 +25,28 @@ pipeline {
         stage('Build with Maven') {
             steps {
                 echo "Building JAR"
+                sh '''
+                    chmod +x mvnw
+                    ./mvnw clean compile
+                '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                echo "Running SonarQube analysis"
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        chmod +x mvnw
+                        ./mvnw sonar:sonar
+                    '''
+                }
+            }
+        }
+
+        stage('Package Application') {
+            steps {
+                echo "Packaging JAR"
                 sh '''
                     chmod +x mvnw
                     ./mvnw clean package -DskipTests
@@ -39,7 +66,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                    credentialsId: DOCKERHUB_CREDENTIALS,
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -59,7 +86,7 @@ pipeline {
             echo "SUCCESS: Image pushed → ${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
-            echo "FAILURE: Something went wrong"
+            echo "FAILURE: Check Jenkins console output"
         }
         always {
             cleanWs()
