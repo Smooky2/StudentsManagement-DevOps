@@ -1,9 +1,7 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven'   // Make sure Maven is configured in Jenkins
-    }
+    
 
     environment {
         DOCKERHUB_CREDENTIALS = 'dockerhub-login'
